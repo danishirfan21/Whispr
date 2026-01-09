@@ -1,70 +1,78 @@
-# 🏗️ Architecture - Pure Audio-to-Text Service
+# 🏗️ Whispr Architecture — WhatsApp-Compliant Audio-to-Text Utility (2026)
 
 ## Overview
 
-This is a **pure audio-to-text transcription service**. It does exactly one thing:
-1. Receives audio files via WhatsApp
-2. Transcribes them using OpenAI Whisper
-3. Sends the transcript back
+Whispr is a **minimal, WhatsApp-policy-compliant audio-to-text utility**.
 
-Everything else is ignored.
+It is intentionally designed to do **exactly one thing**:
+
+1. Receive WhatsApp audio messages  
+2. Transcribe them into text using OpenAI Whisper  
+3. Send the transcript back to the sender  
+
+Whispr **does not** provide conversational AI, memory, summaries, or automated responses.
+
+This design is intentional and aligned with **WhatsApp’s 2026 automation and utility policies**.
+
 
 ## Design Philosophy
 
-**Extreme Simplicity**
-- No AI features (no chat, no summaries, no intelligence)
+### Policy-First by Design
+
+Whispr is built as a **transformation utility**, not an AI agent.
+
+WhatsApp 2026 policy strongly favors:
+- Stateless services
+- Deterministic transformations
+- User-initiated actions
+- No interpretation or decision-making
+
+Whispr complies by enforcing:
 - No conversation memory
-- No state management
-- No button interactions
-- No text processing
-- Pure utility: audio in → text out
+- No contextual understanding
+- No intent detection
+- No automatic follow-ups
+- No AI “personality”
 
-## File Structure
+### Extreme Simplicity
 
-```
-app/
-├── main.py              # FastAPI app (60 lines)
-├── twilio_webhook.py    # Webhook handler (170 lines)
-├── whisper_utils.py     # Audio processing (140 lines)
-├── config.py            # Settings (30 lines)
-├── constants.py         # Constants (20 lines)
-├── deps.py              # DI (15 lines)
-├── utils.py             # Utilities (5 lines)
-├── validators.py        # Validation (15 lines)
-├── rate_limit.py        # Rate limiting (70 lines)
-├── middleware.py        # Logging (15 lines)
-└── health.py            # Health checks (40 lines)
+- Audio in → text out
+- One request = one transformation
+- No state beyond the request lifecycle
+- No branching logic based on user input
+- No feature inference
 
-Total: ~580 lines of actual code
-```
+If a message is not audio, it is ignored.
 
-## Request Flow
 
-### Audio Message Flow
+## WhatsApp 2026 Policy Alignment
 
-```
-1. WhatsApp → Twilio → /webhook/whatsapp
-2. Validate: phone number, rate limit
-3. Check: Is it audio? (if not → ignore silently)
-4. Download: Audio file from Twilio
-5. Transcribe: OpenAI Whisper API
-6. Validate: Duration, quality checks
-7. Send: Transcript via WhatsApp
-8. Cleanup: Delete audio file
-```
+Whispr intentionally restricts its behavior to remain compliant with WhatsApp’s upcoming platform policies.
 
-### Non-Audio Message Flow
+### Allowed
+- Media transformation (audio → text)
+- User-initiated requests
+- Stateless processing
+- Deterministic outputs
+- Utility-style responses
 
-```
-1. WhatsApp → Twilio → /webhook/whatsapp
-2. Validate: phone number, rate limit
-3. Check: Is it audio? NO
-4. Return: Empty 200 response (ignore silently)
-```
+### Explicitly Not Supported
+- Conversational AI
+- Chat memory or history
+- Summarization or interpretation
+- Question answering
+- Multi-turn workflows
+- Command processing
+- Attachments beyond audio
 
-## What Gets Ignored
+These limitations are **deliberate safeguards**, not missing features.
 
-**Silently ignored (no response sent):**
+
+## What Gets Ignored (By Design)
+
+Whispr silently ignores all non-audio input.
+
+Ignored inputs include:
 - Text messages
 - Images
 - Videos
@@ -72,190 +80,31 @@ Total: ~580 lines of actual code
 - Stickers
 - Locations
 - Contacts
-- Any non-audio media
+- Commands or keywords
 
-**Why silent?** 
-- Clean user experience
-- No confusion
-- No unnecessary messages
-- Users learn: audio only
+### Why Silent Ignoring?
 
-## API Design
+- Prevents accidental policy violations
+- Avoids conversational expectations
+- Keeps user mental model simple
+- Reinforces: “This tool only handles audio”
 
-### Webhook Endpoint
-
-```
-POST /webhook/whatsapp
-- Accepts: Twilio webhook payload
-- Processes: Audio files only
-- Returns: 200 (empty response)
-- Side effect: Sends transcript via WhatsApp
-```
-
-### Admin Endpoints
-
-```
-GET /health          - Service health
-GET /admin/stats     - Rate limit stats
-POST /admin/cleanup  - Clean old data
-```
-
-## Security Features
-
-1. **Phone Number Validation**
-   - WhatsApp format required
-   - Prevents invalid requests
-
-2. **Rate Limiting**
-   - Token bucket algorithm
-   - 20 requests/hour default
-   - Per-user limits
-
-3. **File Size Limits**
-   - Max 25MB audio files
-   - Prevents abuse
-
-4. **Input Validation**
-   - URL validation
-   - Filename security
-   - Path traversal prevention
-
-5. **Optional Signature Verification**
-   - Twilio webhook signatures
-   - Disabled by default for simplicity
-
-## Quality Controls
-
-**Audio Quality Checks:**
-- Min duration: 2 seconds (prevents noise)
-- Max words/second: 2.5 (detects gibberish)
-- Timeout: 30 seconds (prevents hanging)
-
-**Rejection Reasons:**
-- Too short (< 2 seconds)
-- Too fast (likely gibberish)
-- Download failed
-- Transcription failed
-- Timeout
-
-## Error Handling
-
-**User-Facing Errors:**
-```
-⚠️ Rate limit exceeded
-⏱️ Audio processing timeout
-❌ Could not transcribe audio
-⚠️ Only audio files supported
-❌ Processing error occurred
-```
-
-**Logging:**
-- Request ID for tracing
-- Processing time metrics
-- Error details with context
-- Quality check results
-
-## Dependencies
-
-**Core (10 packages):**
-```
-fastapi      - Web framework
-uvicorn      - ASGI server
-pydantic     - Settings management
-openai       - Whisper API
-twilio       - WhatsApp integration
-aiohttp      - HTTP client
-anyio        - Async utilities
-python-dotenv - Environment
-python-multipart - Form data
-```
-
-**No unnecessary dependencies:**
-- No database
-- No Redis
-- No Celery
-- No complex queue systems
-
-## Scalability
-
-**Current Design:**
-- Stateless (scales horizontally)
-- In-memory rate limiting (simple, fast)
-- No database (no bottleneck)
-- Async/await throughout
-
-**Scaling Considerations:**
-- Add Redis for distributed rate limiting
-- Add queue system for heavy load
-- Current design handles 100s of requests/day easily
-
-## Configuration
-
-**Required (4 env vars):**
-```bash
-OPENAI_API_KEY
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_SENDER_NUMBER
-```
-
-**Optional (defaults provided):**
-```bash
-MAX_REQUESTS_PER_HOUR=20
-VERIFY_TWILIO_SIGNATURE=false
-```
-
-## Deployment
-
-**Works on:**
-- Render
-- Railway
-- Heroku
-- Any Python hosting
-- Docker
-- Kubernetes
-
-**Requirements:**
-- Python 3.8+
-- 512MB RAM minimum
-- HTTPS endpoint (for Twilio)
-
-## Monitoring
-
-**Built-in:**
-- Request logging (timing, status)
-- Health checks (OpenAI, Twilio)
-- Rate limit stats
-- Error tracking
-
-**Metrics Available:**
-- Requests per user
-- Processing times
-- Success/failure rates
-- Active users
-
-## Future Considerations
-
-**If you want to add features later:**
-
-❌ **Don't add:**
-- Conversation memory
-- AI chat features
-- Complex workflows
-- State management
-
-✅ **Could add:**
-- Language detection
-- Multiple output formats
-- Batch processing
-- Webhook retries
-- Database logging (analytics)
 
 ## Philosophy
 
-> "Do one thing and do it well."
-> - Unix Philosophy
+Whispr follows two principles:
 
-This service transcribes audio. That's it. That's the feature.
+1. **Unix Philosophy**  
+   “Do one thing and do it well.”
 
-No feature creep. No complexity. Just audio → text.
+2. **WhatsApp Utility Principle**  
+   “Transform user-provided content without interpretation.”
+
+Whispr is not an assistant.
+It is not a chatbot.
+It is not intelligent.
+
+It is a small, reliable utility that removes the need to listen to long WhatsApp voice messages.
+
+Audio → Text.
+Nothing more.

@@ -1,123 +1,232 @@
-# 🎙️ Audio-to-Text Service
+# 🎙️ Whispr — WhatsApp Audio-to-Text Utility
 
-**Pure audio transcription using OpenAI Whisper** — Just audio in, text out.
+Never listen to long WhatsApp voice notes again.  
+Whispr converts WhatsApp audio messages into text.  
+That's all it does.
 
-## What It Does
+**Audio in → text out.**
 
-- Receives audio files via WhatsApp
-- Transcribes using OpenAI Whisper
-- Sends transcript back
-- **Ignores everything else** (text messages, images, videos, etc.)
+---
+
+## What Whispr Is
+
+Whispr is a **minimal, self-hosted WhatsApp utility** that:
+
+- Receives **audio messages only**
+- Transcribes them using **OpenAI Whisper**
+- Sends the **verbatim transcript back**
+- **Silently ignores everything else**
+
+No chat.  
+No summaries.  
+No memory.  
+No automation.
+
+This design is intentional and aligned with **WhatsApp 2026 utility and automation policies**.
+
+---
+
+## What Whispr Is Not
+
+Whispr is **not**:
+
+- a chatbot
+- a voice assistant
+- a conversational AI
+- a summarization tool
+- a workflow engine
+
+If you send anything other than audio, **Whispr does nothing**.
+
+---
+
+## Why This Exists
+
+WhatsApp voice notes are often:
+
+- long  
+- inconvenient  
+- impossible to skim  
+- hard to use in public or at work  
+
+Whispr removes the need to listen.
+
+Once you have text, you can:
+
+- read it  
+- search it  
+- copy it  
+- forward it  
+- paste it into ChatGPT or any other tool  
+
+Whispr stops at transcription by design.
+
+---
 
 ## Quick Setup
 
 ### 1. Get API Keys
 
-**OpenAI:**
-- Go to [OpenAI Platform](https://platform.openai.com/api-keys)
-- Create API key (starts with `sk-`)
+#### OpenAI
+- https://platform.openai.com/api-keys
+- Create an API key (`sk-...`)
 
-**Twilio:**
-- Go to [Twilio Console](https://console.twilio.com/)
-- Copy `Account SID` and `Auth Token`
-- Setup [WhatsApp Sandbox](https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn)
+#### Twilio
+- https://console.twilio.com/
+- Copy:
+  - Account SID
+  - Auth Token
+- Set up WhatsApp Sandbox:  
+  https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn
 
-### 2. Install & Run
+---
+
+### 2. Install & Run Locally
 
 ```bash
-# Clone and install
 git clone <repository-url>
-cd audio-to-text
+cd whispr
 pip install -r requirements.txt
 
-# Configure
 cp .env.example .env
-# Edit .env with your API keys
+# add your API keys
 
-# Run
 uvicorn app.main:app --reload
 ```
 
-### 3. Configure Webhook
+---
 
-**Local testing (with ngrok):**
+### 3. Configure WhatsApp Webhook
+
+**Local testing (ngrok):**
+
 ```bash
 ngrok http 8000
-# Set webhook URL in Twilio: https://your-ngrok-url.ngrok.io/webhook/whatsapp
+```
+
+Set webhook URL in Twilio:
+```
+https://your-ngrok-url.ngrok.io/webhook/whatsapp
 ```
 
 **Production:**
 ```
-# Set webhook URL in Twilio: https://yourdomain.com/webhook/whatsapp
+https://yourdomain.com/webhook/whatsapp
 ```
+
+---
 
 ## Usage
 
-1. Send audio file to your WhatsApp number
-2. Receive transcript back
-3. That's it!
+1. Send a voice note to your WhatsApp number
+2. Receive the transcribed text
+3. Done
 
-**What gets ignored:**
-- Text messages (silently ignored)
-- Images (silently ignored)
-- Videos (silently ignored)  
-- Documents (silently ignored)
+---
+
+## Silently Ignored Inputs
+
+- Text messages
+- Images
+- Videos
+- Documents
+- Stickers
+- Locations
+- Contacts
+
+This is intentional to keep behavior predictable and compliant.
+
+---
 
 ## Features
 
-- ✅ **Pure audio-to-text** - No AI features, no summaries, no chat
-- ✅ **Rate limiting** - 20 requests/hour (configurable)
-- ✅ **Secure** - Input validation, file size limits
-- ✅ **Simple** - Does one thing well
+- ✅ Pure audio-to-text
+- ✅ Stateless (no history, no memory)
+- ✅ WhatsApp-policy-friendly
+- ✅ Self-hosted
+- ✅ Rate-limited
+- ✅ No feature creep
+
+---
 
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `POST /webhook/whatsapp` | Twilio webhook (processes audio only) |
+| `POST /webhook/whatsapp` | Twilio webhook (audio only) |
 | `GET /health` | Health check |
-| `GET /admin/stats` | System statistics |
-| `POST /admin/cleanup` | Clean old data |
+| `GET /admin/stats` | Rate-limit stats |
+| `POST /admin/cleanup` | Cleanup old temp files |
+
+---
 
 ## Configuration
 
-Only 4 environment variables required:
+### Required (4 variables)
 
 ```bash
-OPENAI_API_KEY=sk-your-key
-TWILIO_ACCOUNT_SID=ACxxxxx
-TWILIO_AUTH_TOKEN=your-token
-TWILIO_SENDER_NUMBER=whatsapp:+14155238886
+OPENAI_API_KEY
+TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN
+TWILIO_SENDER_NUMBER
 ```
 
-Optional settings (with defaults):
-- `MAX_REQUESTS_PER_HOUR=20` - Rate limit
-- `VERIFY_TWILIO_SIGNATURE=false` - Webhook security
+### Optional
+
+```bash
+MAX_REQUESTS_PER_HOUR=20
+VERIFY_TWILIO_SIGNATURE=false
+```
+
+---
 
 ## How It Works
 
-```
-1. Audio file → WhatsApp
-2. Download audio → Twilio API
-3. Transcribe → OpenAI Whisper API
-4. Send transcript → WhatsApp
-5. Delete audio file
-```
+1. WhatsApp audio message
+2. Twilio webhook → Whispr
+3. Audio download
+4. Whisper transcription
+5. Transcript sent back
+6. Audio deleted
 
-**Processing limits:**
+---
+
+## Limits
+
 - Max file size: 25MB
 - Min duration: 2 seconds
-- Timeout: 30 seconds
+- Processing timeout: 30 seconds
+
+---
 
 ## Deployment
 
-Deploy to any Python hosting:
-- **Render** (recommended)
+Whispr runs on any Python hosting:
+
+- Render (recommended)
 - Railway
 - Heroku
-- Any VPS
+- VPS
+- Docker
+- Kubernetes
 
-Just set environment variables and deploy!
+Set environment variables and deploy.
+
+---
+
+## Non-Goals (Important)
+
+Whispr will **never** include:
+
+- Chat or conversational AI
+- Summarization
+- Memory or context
+- Intent detection
+- Commands or workflows
+
+These are deliberately excluded to keep Whispr simple, safe, and reliable.
+
+---
 
 ## License
 

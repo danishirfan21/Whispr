@@ -16,8 +16,5 @@ class RateLimitConstants:
 
 
 class ErrorResponses:
-    RATE_LIMIT = "⚠️ Rate limit exceeded. Please try again later."
-    AUDIO_TIMEOUT = "⏱️ Audio processing timeout. Try a shorter recording."
-    AUDIO_UNCLEAR = "❌ Could not transcribe audio clearly. Please try again."
-    UNSUPPORTED_MEDIA = "⚠️ Only audio files are supported."
-    PROCESSING_ERROR = "❌ Processing error occurred. Please try again."
+    TRANSCRIBE_FAILED = "Could not transcribe audio."
+    PROCESSING_FAILED = "Audio processing failed."

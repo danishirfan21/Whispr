@@ -105,12 +105,12 @@ async def whatsapp_webhook(
     
     # Check rate limits (only for audio messages)
     if not await check_rate_limit(user_id):
+        logger.warning(f"[{request_id}] Rate limit exceeded for user {user_id}")
         await _send_twilio_message(
             twilio_client,
-            ErrorResponses.RATE_LIMIT,
+            ErrorResponses.PROCESSING_FAILED,
             From
         )
-        logger.info(f"[{request_id}] Rate limited user {user_id}")
         return PlainTextResponse("")
     
     # Process audio file
@@ -122,20 +122,20 @@ async def whatsapp_webhook(
             with fail_after(AudioConstants.TIMEOUT_SEC):
                 transcript = await process_voice_message(MediaUrl0)
         except TimeoutError:
-            logger.warning(f"[{request_id}] Audio processing timeout")
+            logger.error(f"[{request_id}] Audio processing timeout (>{AudioConstants.TIMEOUT_SEC}s) for {MediaUrl0}")
             await _send_twilio_message(
                 twilio_client,
-                ErrorResponses.AUDIO_TIMEOUT,
+                ErrorResponses.PROCESSING_FAILED,
                 From
             )
             return PlainTextResponse("")
         
         # Handle transcription failure
         if transcript is None:
-            logger.warning(f"[{request_id}] Audio transcription failed")
+            logger.error(f"[{request_id}] Transcription failed or returned empty for {MediaUrl0}")
             await _send_twilio_message(
                 twilio_client,
-                ErrorResponses.AUDIO_UNCLEAR,
+                ErrorResponses.TRANSCRIBE_FAILED,
                 From
             )
             return PlainTextResponse("")
@@ -147,10 +147,10 @@ async def whatsapp_webhook(
         logger.info(f"[{request_id}] Sent transcript {message.sid} to {From} in {processing_time:.2f}s")
         
     except Exception as e:
-        logger.error(f"[{request_id}] Error processing audio: {e}")
+        logger.error(f"[{request_id}] Unexpected error processing audio from {user_id}: {type(e).__name__}: {e}", exc_info=True)
         await _send_twilio_message(
             twilio_client,
-            ErrorResponses.PROCESSING_ERROR,
+            ErrorResponses.PROCESSING_FAILED,
             From
         )
     

@@ -136,9 +136,8 @@ async def whatsapp_webhook(
             )
             return PlainTextResponse("")
         
-        # Send transcript back
-        message_text = f"📝 *Transcript:*\n\n{transcript}"
-        message = await _send_twilio_message(twilio_client, message_text, From)
+        # Send transcript back (pure text, no formatting)
+        message = await _send_twilio_message(twilio_client, transcript, From)
         
         processing_time = time.time() - start_time
         logger.info(f"[{request_id}] Sent transcript {message.sid} to {From} in {processing_time:.2f}s")

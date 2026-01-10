@@ -94,16 +94,6 @@ async def whatsapp_webhook(
         logger.warning(f"[{request_id}] Invalid phone number: {From}")
         raise HTTPException(status_code=400, detail="Invalid phone number")
     
-    # Check rate limits
-    if not await check_rate_limit(user_id):
-        await _send_twilio_message(
-            twilio_client,
-            ErrorResponses.RATE_LIMIT,
-            From
-        )
-        logger.info(f"[{request_id}] Rate limited user {user_id}")
-        return PlainTextResponse("")
-    
     # Ignore text messages
     if NumMedia == 0:
         logger.info(f"[{request_id}] Ignored text message from {user_id}")
@@ -112,6 +102,16 @@ async def whatsapp_webhook(
     # Ignore non-audio media
     if not MediaContentType0 or not MediaContentType0.startswith("audio/"):
         logger.info(f"[{request_id}] Ignored non-audio media: {MediaContentType0}")
+        return PlainTextResponse("")
+    
+    # Check rate limits (only for audio messages)
+    if not await check_rate_limit(user_id):
+        await _send_twilio_message(
+            twilio_client,
+            ErrorResponses.RATE_LIMIT,
+            From
+        )
+        logger.info(f"[{request_id}] Rate limited user {user_id}")
         return PlainTextResponse("")
     
     # Signature verification (optional)

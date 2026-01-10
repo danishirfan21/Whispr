@@ -119,21 +119,12 @@ async def process_voice_message(media_url: str) -> Optional[str]:
     if not file_path:
         return None
 
-    # Estimate duration before transcription
-    duration: float = estimate_duration(file_path)
-
     # Transcribe (will delete file in finally block)
     transcript = await transcribe_audio(file_path)
-    if not transcript:
+    
+    # Only reject if completely empty
+    if not transcript or not transcript.strip():
         return None
 
-    # Quality checks
-    word_count: int = len(transcript.split())
-    words_per_sec: float = word_count / duration if duration > 0 else 0
-
-    if duration < AudioConstants.MIN_DURATION_SEC or words_per_sec > AudioConstants.WORDS_PER_SEC_LIMIT:
-        logger.info(f"Rejected transcript (duration: {duration:.1f}s, wps: {words_per_sec:.1f})")
-        return None
-
-    logger.info(f"Accepted transcript ({duration:.1f}s, {word_count} words): {transcript}")
+    logger.info(f"Transcribed: {transcript[:100]}...")
     return transcript

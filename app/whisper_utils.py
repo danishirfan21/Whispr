@@ -41,15 +41,26 @@ async def download_audio(media_url: str, filename: str) -> Optional[str]:
                     logger.error(f"Failed to download audio: HTTP {resp.status}")
                     return None
                 
-                # Check content length
+                # Check content length (if available)
                 content_length = resp.headers.get('content-length')
                 max_size_bytes = AudioConstants.MAX_FILE_SIZE_MB * 1024 * 1024
                 if content_length and int(content_length) > max_size_bytes:
                     logger.error(f"Audio file too large: {content_length} bytes")
                     return None
                 
+                # Enforce max size while streaming
+                bytes_written = 0
                 with open(file_path, "wb") as f:
                     async for chunk in resp.content.iter_chunked(4096):
+                        bytes_written += len(chunk)
+                        if bytes_written > max_size_bytes:
+                            logger.error(f"Audio file exceeded max size during download: {bytes_written} bytes")
+                            # Clean up partial file
+                            try:
+                                file_path.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            return None
                         f.write(chunk)
         return str(file_path)
 

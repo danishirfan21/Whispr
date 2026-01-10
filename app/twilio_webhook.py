@@ -23,12 +23,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def verify_twilio_signature(request: Request, form_data: dict) -> bool:
-    """Verify Twilio webhook signature."""
+async def verify_twilio_signature(request: Request) -> bool:
+    """Verify Twilio webhook signature using full form data."""
     try:
         validator = RequestValidator(settings.twilio_auth_token)
         signature = request.headers.get("X-Twilio-Signature", "")
         url = str(request.url)
+        
+        # Get all form fields for proper signature validation
+        form = await request.form()
+        form_data = {key: value for key, value in form.items()}
+        
         return validator.validate(url, form_data, signature)
     except Exception as e:
         logger.error(f"Signature verification failed: {e}")
@@ -46,23 +51,7 @@ async def _send_twilio_message(client: TwilioClient, body: str, to: str) -> Any:
     return await anyio.to_thread.run_sync(_send)
 
 
-def _prepare_signature_data(
-    body: str, from_number: str, num_media: int,
-    media_url: str = None, media_type: str = None
-) -> dict:
-    """Prepare form data for signature verification."""
-    form_data = {
-        "Body": body,
-        "From": from_number,
-        "NumMedia": str(num_media)
-    }
-    
-    if media_url:
-        form_data["MediaUrl0"] = media_url
-    if media_type:
-        form_data["MediaContentType0"] = media_type
-    
-    return form_data
+
 
 
 @router.post("/whatsapp")
@@ -104,6 +93,12 @@ async def whatsapp_webhook(
         logger.info(f"[{request_id}] Ignored non-audio media: {MediaContentType0}")
         return PlainTextResponse("")
     
+    # Signature verification
+    if settings.verify_twilio_signature:
+        if not await verify_twilio_signature(request):
+            logger.warning(f"[{request_id}] Invalid Twilio signature")
+            raise HTTPException(status_code=403, detail="Invalid signature")
+    
     # Check rate limits (only for audio messages)
     if not await check_rate_limit(user_id):
         await _send_twilio_message(
@@ -113,15 +108,6 @@ async def whatsapp_webhook(
         )
         logger.info(f"[{request_id}] Rate limited user {user_id}")
         return PlainTextResponse("")
-    
-    # Signature verification (optional)
-    if settings.verify_twilio_signature:
-        signature_data = _prepare_signature_data(
-            Body, From, NumMedia, MediaUrl0, MediaContentType0
-        )
-        if not verify_twilio_signature(request, signature_data):
-            logger.warning(f"[{request_id}] Invalid Twilio signature")
-            raise HTTPException(status_code=403, detail="Invalid signature")
     
     # Process audio file
     try:

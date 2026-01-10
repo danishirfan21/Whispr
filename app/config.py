@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     twilio_sender_number: str
     
     # Defaults
-    verify_twilio_signature: bool = False
+    verify_twilio_signature: bool = True
     max_requests_per_hour: int = 20
     downloads_dir: str = "downloads"
     

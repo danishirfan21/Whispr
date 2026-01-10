@@ -17,7 +17,7 @@ from app.whisper_utils import process_voice_message
 from app.rate_limit import check_rate_limit
 from app.utils import sanitize_phone_number
 from app.constants import ErrorResponses, AudioConstants
-from app.validators import validate_phone_number, validate_message_size
+from app.validators import validate_phone_number
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -87,6 +87,10 @@ async def whatsapp_webhook(
     if NumMedia == 0:
         logger.info(f"[{request_id}] Ignored text message from {user_id}")
         return PlainTextResponse("")
+    
+    # If multiple media files, log but only process first
+    if NumMedia > 1:
+        logger.info(f"[{request_id}] Multiple media files ({NumMedia}), processing only first")
     
     # Ignore non-audio media
     if not MediaContentType0 or not MediaContentType0.startswith("audio/"):

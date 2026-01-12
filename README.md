@@ -98,76 +98,88 @@ uvicorn app.main:app --reload
 
 ### 3. Deploy to Production
 
-#### Option A: Vercel (Serverless - Free Tier)
+### 3. Deploy to Production
 
-**This branch is optimized for Vercel deployment!**
+#### Option A: Vercel (Recommended - Free Serverless)
 
-```bash
-# Install Vercel CLI
-npm i -g vercel
+**✅ You're on the `vercel-deployment` branch - optimized for Vercel!**
 
-# Deploy
-vercel
+1. **Install Vercel CLI:**
+   ```bash
+   npm i -g vercel
+   ```
 
-# Add environment variables in Vercel dashboard:
-# - OPENAI_API_KEY
-# - TWILIO_ACCOUNT_SID
-# - TWILIO_AUTH_TOKEN
-# - TWILIO_SENDER_NUMBER
-```
+2. **Deploy:**
+   ```bash
+   vercel
+   ```
 
-Your webhook URL: `https://your-app.vercel.app/webhook/whatsapp`
+3. **Add environment variables** in Vercel Dashboard → Settings → Environment Variables:
+   - `OPENAI_API_KEY` - Your OpenAI API key
+   - `TWILIO_ACCOUNT_SID` - From Twilio Console
+   - `TWILIO_AUTH_TOKEN` - From Twilio Console  
+   - `TWILIO_SENDER_NUMBER` - WhatsApp sandbox number (e.g., `whatsapp:+14155238886`)
 
-**Note:** Vercel deployment is stateless:
-- No file system writes
-- In-memory rate limiting disabled (resets on cold starts)
-- 60-second function timeout
-- Free for hobby projects
+4. **Redeploy** after adding env vars:
+   ```bash
+   vercel --prod
+   ```
+
+5. **Your webhook URL:** `https://your-app.vercel.app/webhook/whatsapp`
+
+**Vercel Benefits:**
+- ✅ Free tier (no credit card required)
+- ✅ Auto-scaling
+- ✅ Global CDN
+- ✅ Zero maintenance
+
+**Limitations:**
+- ⏱️ 60-second timeout
+- 📦 Best for audio < 5 minutes
+- ❄️ Cold starts possible
+
+---
 
 #### Option B: Render/Railway (Traditional Server)
 
-Use the `main` branch for traditional server deployments:
+For longer audio files or persistent rate limiting, use the `main` branch:
 
 ```bash
 git checkout main
 ```
 
-Start command:
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
-
-Build command:
-```bash
-pip install -r requirements.txt
-```
+**Render/Railway Config:**
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Environment Variables:** Same as Vercel
 
 ---
 
 ### 4. Configure WhatsApp Webhook
 
-**Local testing (ngrok):**
+**In Twilio Console → WhatsApp Sandbox Settings:**
 
-```bash
-ngrok http 8000
-```
+Set "When a message comes in" to your webhook URL:
 
-Set webhook URL in Twilio:
+**Vercel:**
 ```
-https://your-ngrok-url.ngrok.io/webhook/whatsapp
+https://your-app.vercel.app/webhook/whatsapp
 ```
 
-**Production:**
+**Render/Other:**
 ```
-https://yourdomain.com/webhook/whatsapp
+https://your-domain.com/webhook/whatsapp
 ```
+
+**Method:** POST
 
 ---
 
 ## Usage
 
-1. Send a voice note to your WhatsApp number
-2. Receive the transcribed text
+1. Send a voice note to your WhatsApp sandbox number
+2. Receive the transcribed text automatically
+3. That's it!
 3. Done
 
 ---

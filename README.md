@@ -175,7 +175,7 @@ TWILIO_SENDER_NUMBER
 
 ```bash
 MAX_REQUESTS_PER_HOUR=20
-VERIFY_TWILIO_SIGNATURE=true  # Turn off only for local testing
+VERIFY_TWILIO_SIGNATURE=false  # Set to true for production with proper webhook verification
 ```
 
 ---

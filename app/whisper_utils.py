@@ -64,24 +64,44 @@ async def download_audio_to_memory(media_url: str) -> Optional[BytesIO]:
 
 
 async def transcribe_audio_from_memory(audio_data: BytesIO, filename: str = "audio.ogg") -> Optional[str]:
-    """Call OpenAI Whisper API with in-memory audio data."""
-    try:
-        client = get_openai_client()
-        
-        # OpenAI API needs a filename hint for format detection
-        audio_data.name = filename
-        
-        result = await client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_data,
-            response_format="text",
-            temperature=0,
-        )
-        return result.strip() if result else None
-
-    except Exception as exc:
-        logger.error(f"Error transcribing audio: {exc}")
-        return None
+    """Call OpenAI Whisper API with in-memory audio data, with retries."""
+    max_retries = 3
+    retry_delay = 1  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            client = get_openai_client()
+            
+            # Reset buffer position before each attempt
+            audio_data.seek(0)
+            
+            # OpenAI API needs a filename hint for format detection
+            audio_data.name = filename
+            
+            result = await client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_data,
+                response_format="text",
+                temperature=0,
+            )
+            
+            if result and result.strip():
+                return result.strip()
+            
+            logger.warning(f"Transcription attempt {attempt + 1} returned empty result")
+            
+        except Exception as exc:
+            logger.error(f"Transcription attempt {attempt + 1} failed: {exc}")
+            
+            if attempt < max_retries - 1:
+                wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                logger.info(f"Retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"All {max_retries} transcription attempts failed")
+                return None
+    
+    return None
 
 
 async def process_voice_message(media_url: str) -> Optional[str]:

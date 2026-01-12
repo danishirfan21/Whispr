@@ -51,6 +51,49 @@ async def _send_twilio_message(client: TwilioClient, body: str, to: str) -> Any:
     return await anyio.to_thread.run_sync(_send)
 
 
+def split_message(text: str, max_length: int = 1600) -> list[str]:
+    """Split long text into chunks under max_length, preserving word boundaries."""
+    if len(text) <= max_length:
+        return [text]
+    
+    chunks = []
+    while text:
+        if len(text) <= max_length:
+            chunks.append(text)
+            break
+        
+        # Find last space before max_length
+        split_pos = text.rfind(' ', 0, max_length)
+        if split_pos == -1:  # No space found, force split
+            split_pos = max_length
+        
+        chunks.append(text[:split_pos].strip())
+        text = text[split_pos:].strip()
+    
+    return chunks
+
+
+async def send_transcript_messages(client: TwilioClient, transcript: str, to: str, request_id: str) -> None:
+    """Send transcript, splitting into multiple messages if needed."""
+    from app.constants import WhatsAppConstants
+    
+    chunks = split_message(transcript, WhatsAppConstants.MAX_MESSAGE_LENGTH)
+    
+    if len(chunks) > 1:
+        logger.info(f"[{request_id}] Splitting transcript into {len(chunks)} messages")
+    
+    for i, chunk in enumerate(chunks, 1):
+        prefix = f"({i}/{len(chunks)}) " if len(chunks) > 1 else ""
+        message_body = prefix + chunk
+        
+        try:
+            await _send_twilio_message(client, message_body, to)
+            logger.info(f"[{request_id}] Sent message part {i}/{len(chunks)}")
+        except Exception as e:
+            logger.error(f"[{request_id}] Failed to send message part {i}/{len(chunks)}: {e}")
+            raise
+
+
 
 
 
@@ -140,11 +183,11 @@ async def whatsapp_webhook(
             )
             return PlainTextResponse("")
         
-        # Send transcript back (pure text, no formatting)
-        message = await _send_twilio_message(twilio_client, transcript, From)
+        # Send transcript back (split into multiple messages if needed)
+        await send_transcript_messages(twilio_client, transcript, From, request_id)
         
         processing_time = time.time() - start_time
-        logger.info(f"[{request_id}] Sent transcript {message.sid} to {From} in {processing_time:.2f}s")
+        logger.info(f"[{request_id}] Sent transcript to {From} in {processing_time:.2f}s")
         
     except Exception as e:
         logger.error(f"[{request_id}] Unexpected error processing audio from {user_id}: {type(e).__name__}: {e}", exc_info=True)

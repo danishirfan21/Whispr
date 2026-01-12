@@ -10,6 +10,10 @@ class AudioConstants:
     DEFAULT_FALLBACK_DURATION = 5.0
 
 
+class WhatsAppConstants:
+    MAX_MESSAGE_LENGTH = 1600  # WhatsApp message limit via Twilio
+
+
 class RateLimitConstants:
     TOKENS_PER_HOUR = 20
     REFILL_INTERVAL_SEC = 180

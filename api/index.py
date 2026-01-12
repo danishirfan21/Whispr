@@ -1,5 +1,6 @@
-"""Vercel serverless function handler."""
+"""Vercel serverless function handler for FastAPI."""
+from mangum import Mangum
 from app.main import app
 
-# Vercel expects the ASGI app to be named 'app' or available via this module
-__all__ = ['app']
+# Mangum adapter converts FastAPI to ASGI handler for Vercel
+handler = Mangum(app, lifespan="off")

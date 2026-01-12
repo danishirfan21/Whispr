@@ -96,7 +96,55 @@ uvicorn app.main:app --reload
 
 ---
 
-### 3. Configure WhatsApp Webhook
+### 3. Deploy to Production
+
+#### Option A: Vercel (Serverless - Free Tier)
+
+**This branch is optimized for Vercel deployment!**
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+
+# Add environment variables in Vercel dashboard:
+# - OPENAI_API_KEY
+# - TWILIO_ACCOUNT_SID
+# - TWILIO_AUTH_TOKEN
+# - TWILIO_SENDER_NUMBER
+```
+
+Your webhook URL: `https://your-app.vercel.app/webhook/whatsapp`
+
+**Note:** Vercel deployment is stateless:
+- No file system writes
+- In-memory rate limiting disabled (resets on cold starts)
+- 60-second function timeout
+- Free for hobby projects
+
+#### Option B: Render/Railway (Traditional Server)
+
+Use the `main` branch for traditional server deployments:
+
+```bash
+git checkout main
+```
+
+Start command:
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+Build command:
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+### 4. Configure WhatsApp Webhook
 
 **Local testing (ngrok):**
 
@@ -141,10 +189,10 @@ This is intentional to keep behavior predictable and compliant.
 ## Features
 
 - ✅ Pure audio-to-text
-- ✅ Stateless (no history, no memory)
+- ✅ Stateless (no history, no memory, no file writes)
 - ✅ WhatsApp-policy-friendly
 - ✅ Self-hosted
-- ✅ Rate-limited
+- ✅ Vercel-compatible (serverless ready)
 - ✅ No feature creep
 
 ---
@@ -174,9 +222,14 @@ TWILIO_SENDER_NUMBER
 ### Optional
 
 ```bash
-MAX_REQUESTS_PER_HOUR=20
+MAX_REQUESTS_PER_HOUR=20  # Only effective on traditional servers (not Vercel)
 VERIFY_TWILIO_SIGNATURE=false  # Set to true for production with proper webhook verification
+ENABLE_RATE_LIMITING=false  # Recommended false for Vercel (in-memory state resets)
 ```
+
+**Branch Differences:**
+- `vercel-deployment` - Stateless, no file I/O, optimized for serverless
+- `main` - Traditional server deployment with file system support
 
 ---
 

@@ -11,18 +11,5 @@
       "src": "/(.*)",
       "dest": "app/main.py"
     }
-  ],
-  "env": {
-    "OPENAI_API_KEY": "@openai_api_key",
-    "TWILIO_ACCOUNT_SID": "@twilio_account_sid",
-    "TWILIO_AUTH_TOKEN": "@twilio_auth_token",
-    "TWILIO_SENDER_NUMBER": "@twilio_sender_number",
-    "VERIFY_TWILIO_SIGNATURE": "false",
-    "ENABLE_RATE_LIMITING": "false"
-  },
-  "functions": {
-    "app/main.py": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }

@@ -77,7 +77,13 @@ async def send_transcript_messages(client: TwilioClient, transcript: str, to: st
     """Send transcript, splitting into multiple messages if needed."""
     from app.constants import WhatsAppConstants
     
-    chunks = split_message(transcript, WhatsAppConstants.MAX_MESSAGE_LENGTH)
+    max_length = WhatsAppConstants.MAX_MESSAGE_LENGTH
+    
+    # Reserve space for prefix like "(99/99) " = 9 chars max
+    prefix_reserve = 10
+    chunk_max_length = max_length - prefix_reserve
+    
+    chunks = split_message(transcript, chunk_max_length)
     
     if len(chunks) > 1:
         logger.info(f"[{request_id}] Splitting transcript into {len(chunks)} messages")
@@ -86,9 +92,14 @@ async def send_transcript_messages(client: TwilioClient, transcript: str, to: st
         prefix = f"({i}/{len(chunks)}) " if len(chunks) > 1 else ""
         message_body = prefix + chunk
         
+        # Safety check - ensure we're under limit
+        if len(message_body) > max_length:
+            logger.warning(f"[{request_id}] Message part {i} still too long ({len(message_body)} chars), truncating")
+            message_body = message_body[:max_length]
+        
         try:
             await _send_twilio_message(client, message_body, to)
-            logger.info(f"[{request_id}] Sent message part {i}/{len(chunks)}")
+            logger.info(f"[{request_id}] Sent message part {i}/{len(chunks)} ({len(message_body)} chars)")
         except Exception as e:
             logger.error(f"[{request_id}] Failed to send message part {i}/{len(chunks)}: {e}")
             raise

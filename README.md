@@ -197,14 +197,26 @@ This is intentional to keep behavior predictable and compliant.
 
 ---
 
+## Serverless Constraints (Vercel Branch)
+
+This branch is optimized for serverless deployment with inherent limitations:
+
+- ⏱️ **Max execution time**: ~60 seconds (Vercel timeout)
+- 📦 **Large audio files may timeout**: Keep voice notes under 5 minutes
+- ❄️ **Cold starts possible**: First request after inactivity may be slower
+- 🔄 **Stateless by design**: No persistent storage, rate limiting resets
+- 🔁 **Auto-retry**: 3 attempts with exponential backoff for reliability
+
+For longer audio files or persistent rate limiting, use the `main` branch on Render/Railway.
+
+---
+
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
 | `POST /webhook/whatsapp` | Twilio webhook (audio only) |
 | `GET /health` | Health check |
-| `GET /admin/stats` | Rate-limit stats |
-| `POST /admin/cleanup` | Cleanup old temp files |
 
 ---
 

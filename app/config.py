@@ -16,9 +16,8 @@ class Settings(BaseSettings):
     
     # Defaults
     verify_twilio_signature: bool = False
-    enable_rate_limiting: bool = True  # Set to False for Vercel to disable in-memory rate limiting
     max_requests_per_hour: int = 20
-    downloads_dir: str = "downloads"  # Not used in stateless mode
+    downloads_dir: str = "downloads"
     
     class Config:
         env_file = ".env"

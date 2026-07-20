@@ -153,11 +153,12 @@ async def translate_audio_to_english(audio_data: BytesIO, filename: str = "audio
 
 
 async def process_voice_message(media_url: str) -> Optional[str]:
-    """Process voice message from media URL to transcript (stateless, no disk I/O).
+    """Process voice message from media URL to English text (stateless, no disk I/O).
 
-    Non-English audio also gets an English translation appended, using the
-    same whisper-1 model. English audio skips the translation call entirely
-    since it would just echo the transcript back, wasting an API call.
+    Non-English audio is translated to English using the same whisper-1
+    model, so the reply is always plain English text. English audio skips
+    the translation call entirely since it would just echo the transcript
+    back, wasting an API call.
     """
     filename = f"voice_{uuid.uuid4().hex[:8]}.ogg"
 
@@ -180,7 +181,4 @@ async def process_voice_message(media_url: str) -> Optional[str]:
         return transcript
 
     translation = await translate_audio_to_english(audio_data, filename)
-    if not translation:
-        return transcript
-
-    return f"{transcript}\n\n🌐 English translation:\n{translation}"
+    return translation or transcript

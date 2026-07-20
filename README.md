@@ -14,7 +14,7 @@ Whispr is a **minimal, self-hosted WhatsApp utility** that:
 
 - Receives **audio messages only**
 - Transcribes them using **OpenAI Whisper**
-- Sends the **verbatim transcript back**
+- Sends the **verbatim transcript back**, plus an **English translation** appended automatically when the voice note isn't in English
 - **Silently ignores everything else**
 
 No chat.  
@@ -96,30 +96,90 @@ uvicorn app.main:app --reload
 
 ---
 
-### 3. Configure WhatsApp Webhook
+### 3. Deploy to Production
 
-**Local testing (ngrok):**
+### 3. Deploy to Production
+
+#### Option A: Vercel (Recommended - Free Serverless)
+
+**✅ You're on the `vercel-deployment` branch - optimized for Vercel!**
+
+1. **Install Vercel CLI:**
+   ```bash
+   npm i -g vercel
+   ```
+
+2. **Deploy:**
+   ```bash
+   vercel
+   ```
+
+3. **Add environment variables** in Vercel Dashboard → Settings → Environment Variables:
+   - `OPENAI_API_KEY` - Your OpenAI API key
+   - `TWILIO_ACCOUNT_SID` - From Twilio Console
+   - `TWILIO_AUTH_TOKEN` - From Twilio Console  
+   - `TWILIO_SENDER_NUMBER` - WhatsApp sandbox number (e.g., `whatsapp:+14155238886`)
+
+4. **Redeploy** after adding env vars:
+   ```bash
+   vercel --prod
+   ```
+
+5. **Your webhook URL:** `https://your-app.vercel.app/webhook/whatsapp`
+
+**Vercel Benefits:**
+- ✅ Free tier (no credit card required)
+- ✅ Auto-scaling
+- ✅ Global CDN
+- ✅ Zero maintenance
+
+**Limitations:**
+- ⏱️ 60-second timeout
+- 📦 Best for audio < 5 minutes
+- ❄️ Cold starts possible
+
+---
+
+#### Option B: Render/Railway (Traditional Server)
+
+For longer audio files or persistent rate limiting, use the `main` branch:
 
 ```bash
-ngrok http 8000
+git checkout main
 ```
 
-Set webhook URL in Twilio:
+**Render/Railway Config:**
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Environment Variables:** Same as Vercel
+
+---
+
+### 4. Configure WhatsApp Webhook
+
+**In Twilio Console → WhatsApp Sandbox Settings:**
+
+Set "When a message comes in" to your webhook URL:
+
+**Vercel:**
 ```
-https://your-ngrok-url.ngrok.io/webhook/whatsapp
+https://your-app.vercel.app/webhook/whatsapp
 ```
 
-**Production:**
+**Render/Other:**
 ```
-https://yourdomain.com/webhook/whatsapp
+https://your-domain.com/webhook/whatsapp
 ```
+
+**Method:** POST
 
 ---
 
 ## Usage
 
-1. Send a voice note to your WhatsApp number
-2. Receive the transcribed text
+1. Send a voice note to your WhatsApp sandbox number
+2. Receive the transcribed text automatically
+3. That's it!
 3. Done
 
 ---
@@ -141,11 +201,25 @@ This is intentional to keep behavior predictable and compliant.
 ## Features
 
 - ✅ Pure audio-to-text
-- ✅ Stateless (no history, no memory)
+- ✅ Stateless (no history, no memory, no file writes)
 - ✅ WhatsApp-policy-friendly
 - ✅ Self-hosted
-- ✅ Rate-limited
+- ✅ Vercel-compatible (serverless ready)
 - ✅ No feature creep
+
+---
+
+## Serverless Constraints (Vercel Branch)
+
+This branch is optimized for serverless deployment with inherent limitations:
+
+- ⏱️ **Max execution time**: ~60 seconds (Vercel timeout)
+- 📦 **Large audio files may timeout**: Keep voice notes under 5 minutes
+- ❄️ **Cold starts possible**: First request after inactivity may be slower
+- 🔄 **Stateless by design**: No persistent storage, rate limiting resets
+- 🔁 **Auto-retry**: 3 attempts with exponential backoff for reliability
+
+For longer audio files or persistent rate limiting, use the `main` branch on Render/Railway.
 
 ---
 
@@ -155,8 +229,6 @@ This is intentional to keep behavior predictable and compliant.
 |----------|-------------|
 | `POST /webhook/whatsapp` | Twilio webhook (audio only) |
 | `GET /health` | Health check |
-| `GET /admin/stats` | Rate-limit stats |
-| `POST /admin/cleanup` | Cleanup old temp files |
 
 ---
 
@@ -174,9 +246,14 @@ TWILIO_SENDER_NUMBER
 ### Optional
 
 ```bash
-MAX_REQUESTS_PER_HOUR=20
+MAX_REQUESTS_PER_HOUR=20  # Only effective on traditional servers (not Vercel)
 VERIFY_TWILIO_SIGNATURE=false  # Set to true for production with proper webhook verification
+ENABLE_RATE_LIMITING=false  # Recommended false for Vercel (in-memory state resets)
 ```
+
+**Branch Differences:**
+- `vercel-deployment` - Stateless, no file I/O, optimized for serverless
+- `main` - Traditional server deployment with file system support
 
 ---
 

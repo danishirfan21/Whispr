@@ -1,4 +1,4 @@
-"""Rate limiting using token bucket algorithm."""
+"""Rate limiting using token bucket algorithm - Stateless-friendly."""
 import time
 import logging
 from typing import Dict, Tuple
@@ -8,6 +8,8 @@ from app.constants import RateLimitConstants
 logger = logging.getLogger(__name__)
 
 # In-memory storage: {user_id: (tokens, last_refill_time)}
+# NOTE: For Vercel/serverless, this resets on cold starts
+# Consider disabling rate limiting or using external Redis (Upstash)
 _rate_limits: Dict[str, Tuple[int, float]] = {}
 
 
@@ -15,12 +17,20 @@ async def check_rate_limit(user_id: str) -> bool:
     """
     Check if user is within rate limits using token bucket.
     
+    NOTE: In serverless environments (Vercel), this resets on cold starts.
+    Set ENABLE_RATE_LIMITING=false to disable, or use external Redis.
+    
     Args:
         user_id: Unique identifier for user (phone number)
         
     Returns:
         True if request is allowed, False if rate limited
     """
+    # Check if rate limiting is enabled
+    if not getattr(settings, 'enable_rate_limiting', True):
+        logger.debug("Rate limiting disabled")
+        return True
+    
     max_requests = getattr(settings, 'max_requests_per_hour', RateLimitConstants.TOKENS_PER_HOUR)
     current_time: float = time.time()
     

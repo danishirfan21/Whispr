@@ -1,9 +1,10 @@
-"""Audio processing using OpenAI Whisper - Stateless (Vercel-compatible)."""
+"""Audio processing using OpenAI Whisper."""
+import os
 import uuid
 import aiohttp
 import asyncio
 import logging
-from io import BytesIO
+from pathlib import Path
 from typing import Optional
 
 from app.config import settings
@@ -13,14 +14,22 @@ from app.constants import AudioConstants
 logger = logging.getLogger(__name__)
 
 
-async def download_audio_to_memory(media_url: str) -> Optional[BytesIO]:
-    """Download audio file from Twilio media URL directly to memory (stateless)."""
+async def download_audio(media_url: str, filename: str) -> Optional[str]:
+    """Download audio file from Twilio media URL and return local path."""
     # Input validation
     if not media_url or not media_url.startswith('http'):
         logger.error("Invalid media URL")
         return None
     
+    if not filename or '..' in filename:
+        logger.error("Invalid filename for security")
+        return None
+    
     try:
+        downloads_dir = Path(settings.downloads_dir)
+        downloads_dir.mkdir(exist_ok=True)
+
+        file_path = downloads_dir / filename
         auth = aiohttp.BasicAuth(
             settings.twilio_account_sid, settings.twilio_auth_token
         )
@@ -39,148 +48,83 @@ async def download_audio_to_memory(media_url: str) -> Optional[BytesIO]:
                     logger.error(f"Audio file too large: {content_length} bytes")
                     return None
                 
-                # Download to memory with size enforcement
-                audio_buffer = BytesIO()
+                # Enforce max size while streaming
                 bytes_written = 0
-                
-                async for chunk in resp.content.iter_chunked(4096):
-                    bytes_written += len(chunk)
-                    if bytes_written > max_size_bytes:
-                        logger.error(f"Audio file exceeded max size during download: {bytes_written} bytes")
-                        return None
-                    audio_buffer.write(chunk)
-                
-                # Reset buffer position to beginning for reading
-                audio_buffer.seek(0)
-                logger.info(f"Downloaded audio to memory: {bytes_written} bytes")
-                return audio_buffer
+                with open(file_path, "wb") as f:
+                    async for chunk in resp.content.iter_chunked(4096):
+                        bytes_written += len(chunk)
+                        if bytes_written > max_size_bytes:
+                            logger.error(f"Audio file exceeded max size during download: {bytes_written} bytes")
+                            # Clean up partial file
+                            try:
+                                file_path.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            return None
+                        f.write(chunk)
+        return str(file_path)
 
     except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
         logger.error(f"Network error downloading audio: {exc}")
+        return None
+    except OSError as exc:
+        logger.error(f"File system error: {exc}")
         return None
     except Exception as exc:
         logger.error(f"Unexpected error downloading audio: {exc}")
         return None
 
 
-async def transcribe_audio_from_memory(audio_data: BytesIO, filename: str = "audio.ogg") -> Optional[tuple[str, str]]:
-    """Call OpenAI Whisper API with in-memory audio data, with retries.
+def estimate_duration(file_path: str) -> float:
+    """Rough duration estimate from file size."""
+    try:
+        size = os.path.getsize(file_path)
+        estimated = size / AudioConstants.BYTES_PER_SEC_EST
+        return max(estimated, AudioConstants.MIN_FALLBACK_DURATION)
+    except OSError:
+        return AudioConstants.DEFAULT_FALLBACK_DURATION
 
-    Uses verbose_json so the detected source language comes back in the same
-    call (no extra API cost), letting callers skip translation for English audio.
-    Returns (transcript, language) or None on failure.
-    """
-    max_retries = 3
-    retry_delay = 1  # seconds
 
-    for attempt in range(max_retries):
-        try:
-            client = get_openai_client()
-
-            # Reset buffer position before each attempt
-            audio_data.seek(0)
-
-            # OpenAI API needs a filename hint for format detection
-            audio_data.name = filename
-
+async def transcribe_audio(file_path: str) -> Optional[str]:
+    """Call OpenAI Whisper and return transcript."""
+    try:
+        client = get_openai_client()
+        with open(file_path, "rb") as audio_file:
             result = await client.audio.transcriptions.create(
                 model="whisper-1",
-                file=audio_data,
-                response_format="verbose_json",
-                temperature=0,
-            )
-
-            text = (result.text or "").strip()
-            if text:
-                language = (result.language or "").strip().lower()
-                return text, language
-
-            logger.warning(f"Transcription attempt {attempt + 1} returned empty result")
-
-        except Exception as exc:
-            logger.error(f"Transcription attempt {attempt + 1} failed: {exc}")
-
-            if attempt < max_retries - 1:
-                wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
-                logger.info(f"Retrying in {wait_time}s...")
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error(f"All {max_retries} transcription attempts failed")
-                return None
-
-    return None
-
-
-async def translate_audio_to_english(audio_data: BytesIO, filename: str = "audio.ogg") -> Optional[str]:
-    """Call OpenAI's Whisper translation endpoint to get an English translation, with retries."""
-    max_retries = 3
-    retry_delay = 1  # seconds
-
-    for attempt in range(max_retries):
-        try:
-            client = get_openai_client()
-
-            # Reset buffer position before each attempt
-            audio_data.seek(0)
-
-            # OpenAI API needs a filename hint for format detection
-            audio_data.name = filename
-
-            result = await client.audio.translations.create(
-                model="whisper-1",
-                file=audio_data,
+                file=audio_file,
                 response_format="text",
                 temperature=0,
             )
+        return result.strip() if result else None
 
-            if result and result.strip():
-                return result.strip()
-
-            logger.warning(f"Translation attempt {attempt + 1} returned empty result")
-
-        except Exception as exc:
-            logger.error(f"Translation attempt {attempt + 1} failed: {exc}")
-
-            if attempt < max_retries - 1:
-                wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
-                logger.info(f"Retrying in {wait_time}s...")
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error(f"All {max_retries} translation attempts failed")
-                return None
-
-    return None
+    except Exception as exc:
+        logger.error(f"Error transcribing audio: {exc}")
+        return None
+    finally:
+        # Always remove temp file
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except OSError as exc:
+            logger.warning(f"Could not remove temp file {file_path}: {exc}")
 
 
 async def process_voice_message(media_url: str) -> Optional[str]:
-    """Process voice message from media URL to transcript (stateless, no disk I/O).
-
-    Non-English audio also gets an English translation appended, using the
-    same whisper-1 model. English audio skips the translation call entirely
-    since it would just echo the transcript back, wasting an API call.
-    """
+    """Process voice message from media URL to transcript."""
     filename = f"voice_{uuid.uuid4().hex[:8]}.ogg"
 
-    # Download audio to memory
-    audio_data = await download_audio_to_memory(media_url)
-    if not audio_data:
+    # Download audio
+    file_path = await download_audio(media_url, filename)
+    if not file_path:
         return None
 
-    # Transcribe from memory
-    transcription = await transcribe_audio_from_memory(audio_data, filename)
-
+    # Transcribe (will delete file in finally block)
+    transcript = await transcribe_audio(file_path)
+    
     # Only reject if completely empty
-    if not transcription:
+    if not transcript or not transcript.strip():
         return None
 
-    transcript, language = transcription
-    logger.info(f"Transcribed ({language or 'unknown'}): {transcript[:100]}...")
-
-    if language == "english":
-        return transcript
-
-    translation = await translate_audio_to_english(audio_data, filename)
-    if not translation:
-        return transcript
-
-    return f"{transcript}\n\n🌐 English translation:\n{translation}"
+    logger.info(f"Transcribed: {transcript[:100]}...")
+    return transcript

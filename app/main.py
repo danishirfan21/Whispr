@@ -5,6 +5,7 @@ import asyncio
 from fastapi import FastAPI
 from app.health import ping_openai, ping_twilio
 from app.twilio_webhook import router as twilio_router
+from app.rate_limit import cleanup_old_rate_limits, get_rate_limit_stats
 from app.middleware import SimpleLoggingMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -40,4 +41,23 @@ async def health() -> dict:
             "openai": openai_status,
             "twilio": twilio_status
         },
+    }
+
+
+@app.get("/admin/stats", tags=["admin"])
+async def get_stats():
+    """Get system statistics."""
+    return {
+        "service": "audio-to-text",
+        "rate_limit_stats": get_rate_limit_stats()
+    }
+
+
+@app.post("/admin/cleanup", tags=["admin"])
+async def cleanup_data():
+    """Clean up old rate limits."""
+    rate_limits_cleaned = cleanup_old_rate_limits(48)
+    return {
+        "rate_limits_cleaned": rate_limits_cleaned,
+        "status": "completed"
     }

@@ -13,7 +13,7 @@ That's all it does.
 Whispr is a **minimal, self-hosted WhatsApp utility** that:
 
 - Receives **audio messages only**
-- Transcribes them using **OpenAI Whisper**
+- Transcribes them using **OpenAI's gpt-transcribe**
 - Sends the **verbatim transcript back**, automatically translated to **English** when the voice note isn't already in English
 - **Silently ignores everything else**
 
@@ -262,7 +262,7 @@ ENABLE_RATE_LIMITING=false  # Recommended false for Vercel (in-memory state rese
 1. WhatsApp audio message
 2. Twilio webhook → Whispr
 3. Audio download
-4. Whisper transcription
+4. gpt-transcribe transcription (whisper-1 translation for non-English audio)
 5. Transcript sent back
 6. Audio deleted
 

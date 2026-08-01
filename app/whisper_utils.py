@@ -64,11 +64,13 @@ async def download_audio_to_memory(media_url: str) -> Optional[BytesIO]:
 
 
 async def transcribe_audio_from_memory(audio_data: BytesIO, filename: str = "audio.ogg") -> Optional[tuple[str, str]]:
-    """Call OpenAI Whisper API with in-memory audio data, with retries.
+    """Call OpenAI's gpt-transcribe API with in-memory audio data, with retries.
 
-    Uses verbose_json so the detected source language comes back in the same
-    call (no extra API cost), letting callers skip translation for English audio.
-    Returns (transcript, language) or None on failure.
+    gpt-transcribe is cheaper and more accurate than whisper-1 for file
+    transcription, and still reports detected language(s) in the same call
+    (no extra API cost), letting callers skip translation for English audio.
+    Returns (transcript, language_code) or None on failure. language_code is
+    "" when the model couldn't make a reliable language prediction.
     """
     max_retries = 3
     retry_delay = 1  # seconds
@@ -84,15 +86,23 @@ async def transcribe_audio_from_memory(audio_data: BytesIO, filename: str = "aud
             audio_data.name = filename
 
             result = await client.audio.transcriptions.create(
-                model="whisper-1",
+                model="gpt-transcribe",
                 file=audio_data,
-                response_format="verbose_json",
+                response_format="json",
                 temperature=0,
             )
 
             text = (result.text or "").strip()
             if text:
-                language = (result.language or "").strip().lower()
+                # gpt-transcribe reports detected languages as e.g. [{"code": "fr"}],
+                # not the verbose_json-only "language" field whisper-1 used.
+                detected_languages = getattr(result, "languages", None) or []
+                language = ""
+                for entry in detected_languages:
+                    code = entry.get("code") if isinstance(entry, dict) else getattr(entry, "code", None)
+                    if code:
+                        language = code.strip().lower()
+                        break
                 return text, language
 
             logger.warning(f"Transcription attempt {attempt + 1} returned empty result")
@@ -155,10 +165,12 @@ async def translate_audio_to_english(audio_data: BytesIO, filename: str = "audio
 async def process_voice_message(media_url: str) -> Optional[str]:
     """Process voice message from media URL to English text (stateless, no disk I/O).
 
-    Non-English audio is translated to English using the same whisper-1
-    model, so the reply is always plain English text. English audio skips
-    the translation call entirely since it would just echo the transcript
-    back, wasting an API call.
+    Transcribes with gpt-transcribe (cheaper and more accurate than
+    whisper-1). Non-English audio is then translated to English via
+    whisper-1's translations endpoint, since gpt-transcribe has no
+    translation support. Only audio confidently detected as English skips
+    the translation call, since translating it would just echo the
+    transcript back, wasting an API call.
     """
     filename = f"voice_{uuid.uuid4().hex[:8]}.ogg"
 
@@ -177,7 +189,7 @@ async def process_voice_message(media_url: str) -> Optional[str]:
     transcript, language = transcription
     logger.info(f"Transcribed ({language or 'unknown'}): {transcript[:100]}...")
 
-    if language == "english":
+    if language == "en":
         return transcript
 
     translation = await translate_audio_to_english(audio_data, filename)

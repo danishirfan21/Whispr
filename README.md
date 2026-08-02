@@ -14,7 +14,7 @@ Whispr is a **minimal, self-hosted WhatsApp utility** that:
 
 - Receives **audio messages only**
 - Transcribes them using **OpenAI's gpt-transcribe**
-- Sends the **verbatim transcript back**, automatically translated to **English** when the voice note isn't already in English
+- Sends the **verbatim transcript back**, plus an **English translation** appended automatically when the voice note isn't already in English
 - **Silently ignores everything else**
 
 No chat.  

@@ -163,14 +163,16 @@ async def translate_audio_to_english(audio_data: BytesIO, filename: str = "audio
 
 
 async def process_voice_message(media_url: str) -> Optional[str]:
-    """Process voice message from media URL to English text (stateless, no disk I/O).
+    """Process voice message from media URL to text (stateless, no disk I/O).
 
     Transcribes with gpt-transcribe (cheaper and more accurate than
     whisper-1). Non-English audio is then translated to English via
     whisper-1's translations endpoint, since gpt-transcribe has no
-    translation support. Only audio confidently detected as English skips
-    the translation call, since translating it would just echo the
-    transcript back, wasting an API call.
+    translation support, and both the original transcript and the
+    translation are returned together. Only audio confidently detected as
+    English skips the translation call and returns the transcript alone,
+    since translating it would just echo the transcript back, wasting an
+    API call.
     """
     filename = f"voice_{uuid.uuid4().hex[:8]}.ogg"
 
@@ -193,4 +195,7 @@ async def process_voice_message(media_url: str) -> Optional[str]:
         return transcript
 
     translation = await translate_audio_to_english(audio_data, filename)
-    return translation or transcript
+    if not translation:
+        return transcript
+
+    return f"{transcript}\n\n🌐 English translation:\n{translation}"

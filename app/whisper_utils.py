@@ -198,4 +198,4 @@ async def process_voice_message(media_url: str) -> Optional[str]:
     if not translation:
         return transcript
 
-    return f"{transcript}\n\n🌐 English translation:\n{translation}"
+    return f"{transcript}\n\n{translation}"

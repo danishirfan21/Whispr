@@ -19,7 +19,7 @@ async def download_audio_to_memory(media_url: str) -> Optional[BytesIO]:
     if not media_url or not media_url.startswith('http'):
         logger.error("Invalid media URL")
         return None
-    
+
     try:
         auth = aiohttp.BasicAuth(
             settings.twilio_account_sid, settings.twilio_auth_token
@@ -31,28 +31,50 @@ async def download_audio_to_memory(media_url: str) -> Optional[BytesIO]:
                 if resp.status != 200:
                     logger.error(f"Failed to download audio: HTTP {resp.status}")
                     return None
-                
+
+                response_content_type = (resp.headers.get('content-type') or '').split(';', 1)[0].strip().lower()
+
                 # Check content length (if available)
                 content_length = resp.headers.get('content-length')
                 max_size_bytes = AudioConstants.MAX_FILE_SIZE_MB * 1024 * 1024
                 if content_length and int(content_length) > max_size_bytes:
                     logger.error(f"Audio file too large: {content_length} bytes")
                     return None
-                
+
                 # Download to memory with size enforcement
                 audio_buffer = BytesIO()
                 bytes_written = 0
-                
+                first_chunk = b""
+
                 async for chunk in resp.content.iter_chunked(4096):
+                    if not first_chunk:
+                        first_chunk = chunk[:16]
                     bytes_written += len(chunk)
                     if bytes_written > max_size_bytes:
                         logger.error(f"Audio file exceeded max size during download: {bytes_written} bytes")
                         return None
                     audio_buffer.write(chunk)
-                
+
+                logger.info(
+                    f"Downloaded audio to memory: content_type={response_content_type!r} "
+                    f"size={bytes_written} first_bytes={first_chunk!r}"
+                )
+
+                if bytes_written == 0:
+                    logger.error("Downloaded audio file is empty")
+                    return None
+
+                # Twilio media auth failures/errors come back as JSON/HTML
+                # instead of audio bytes - catch that before handing a bogus
+                # buffer to the transcription API.
+                if first_chunk.lstrip()[:1] in (b"<", b"{"):
+                    logger.error(
+                        f"Downloaded content does not look like audio (content_type={response_content_type!r})"
+                    )
+                    return None
+
                 # Reset buffer position to beginning for reading
                 audio_buffer.seek(0)
-                logger.info(f"Downloaded audio to memory: {bytes_written} bytes")
                 return audio_buffer
 
     except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
@@ -72,6 +94,8 @@ async def transcribe_audio_from_memory(audio_data: BytesIO, filename: str = "aud
     Returns (transcript, language_code) or None on failure. language_code is
     "" when the model couldn't make a reliable language prediction.
     """
+    from openai import BadRequestError
+
     max_retries = 3
     retry_delay = 1  # seconds
 
@@ -107,6 +131,14 @@ async def transcribe_audio_from_memory(audio_data: BytesIO, filename: str = "aud
 
             logger.warning(f"Transcription attempt {attempt + 1} returned empty result")
 
+        except BadRequestError as exc:
+            # A 400 means the file itself was rejected (bad format,
+            # corrupted download, etc.) - retrying with the same bytes
+            # will never succeed, so fail fast instead of burning the
+            # whole retry budget.
+            logger.error(f"Permanent transcription error (file rejected by API): {exc}")
+            return None
+
         except Exception as exc:
             logger.error(f"Transcription attempt {attempt + 1} failed: {exc}")
 
@@ -123,6 +155,8 @@ async def transcribe_audio_from_memory(audio_data: BytesIO, filename: str = "aud
 
 async def translate_audio_to_english(audio_data: BytesIO, filename: str = "audio.ogg") -> Optional[str]:
     """Call OpenAI's Whisper translation endpoint to get an English translation, with retries."""
+    from openai import BadRequestError
+
     max_retries = 3
     retry_delay = 1  # seconds
 
@@ -148,6 +182,12 @@ async def translate_audio_to_english(audio_data: BytesIO, filename: str = "audio
 
             logger.warning(f"Translation attempt {attempt + 1} returned empty result")
 
+        except BadRequestError as exc:
+            # A 400 means the file itself was rejected - retrying with the
+            # same bytes will never succeed.
+            logger.error(f"Permanent translation error (file rejected by API): {exc}")
+            return None
+
         except Exception as exc:
             logger.error(f"Translation attempt {attempt + 1} failed: {exc}")
 
@@ -162,7 +202,7 @@ async def translate_audio_to_english(audio_data: BytesIO, filename: str = "audio
     return None
 
 
-async def process_voice_message(media_url: str) -> Optional[str]:
+async def process_voice_message(media_url: str, content_type: Optional[str] = None) -> Optional[str]:
     """Process voice message from media URL to text (stateless, no disk I/O).
 
     Transcribes with gpt-transcribe (cheaper and more accurate than
@@ -174,7 +214,16 @@ async def process_voice_message(media_url: str) -> Optional[str]:
     since translating it would just echo the transcript back, wasting an
     API call.
     """
-    filename = f"voice_{uuid.uuid4().hex[:8]}.ogg"
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    extension = AudioConstants.CONTENT_TYPE_EXTENSIONS.get(
+        normalized_content_type, AudioConstants.DEFAULT_AUDIO_EXTENSION
+    )
+    if normalized_content_type and normalized_content_type not in AudioConstants.CONTENT_TYPE_EXTENSIONS:
+        logger.warning(
+            f"Unrecognized audio content type {normalized_content_type!r}, "
+            f"defaulting to {extension} extension"
+        )
+    filename = f"voice_{uuid.uuid4().hex[:8]}{extension}"
 
     # Download audio to memory
     audio_data = await download_audio_to_memory(media_url)

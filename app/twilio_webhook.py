@@ -174,19 +174,19 @@ async def whatsapp_webhook(
         # Transcribe audio with timeout
         try:
             with fail_after(AudioConstants.TIMEOUT_SEC):
-                transcript = await process_voice_message(MediaUrl0, MediaContentType0)
+                transcript = await process_voice_message(MediaUrl0)
         except TimeoutError:
-            logger.error(f"[{request_id}] Audio processing timeout (>{AudioConstants.TIMEOUT_SEC}s)")
+            logger.error(f"[{request_id}] Audio processing timeout (>{AudioConstants.TIMEOUT_SEC}s) for {MediaUrl0}")
             await _send_twilio_message(
                 twilio_client,
                 ErrorResponses.PROCESSING_FAILED,
                 From
             )
             return PlainTextResponse("")
-
+        
         # Handle transcription failure
         if transcript is None:
-            logger.error(f"[{request_id}] Transcription failed or returned empty (content_type={MediaContentType0})")
+            logger.error(f"[{request_id}] Transcription failed or returned empty for {MediaUrl0}")
             await _send_twilio_message(
                 twilio_client,
                 ErrorResponses.TRANSCRIBE_FAILED,
